@@ -3,6 +3,15 @@ import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 
+import websocket
+  from "@fastify/websocket";
+
+import {
+  registerDevice,
+  listDevices,
+  sendDeviceCommand,
+} from "./deviceHub.js";
+
 import {
   startHermesRun,
   waitForHermes,
@@ -14,6 +23,10 @@ const app = Fastify({
   logger: true,
 });
 
+await app.register(
+    websocket,
+  );
+
 await app.register(cors, {
   origin: [
     "http://localhost:5173",
@@ -21,12 +34,119 @@ await app.register(cors, {
   ],
 });
 
+const DEVICE_TOKEN =
+  process.env
+    .VOX_DEVICE_TOKEN!;
+
+
+app.get(
+  "/device/ws",
+
+  {
+    websocket: true,
+  },
+
+  (
+    socket,
+    request,
+  ) => {
+    const auth =
+      request.headers
+        .authorization;
+
+    if (
+      auth !==
+      `Bearer ${DEVICE_TOKEN}`
+    ) {
+      socket.close(
+        1008,
+        "Unauthorized",
+      );
+
+      return;
+    }
+
+
+    const deviceId =
+      request.headers[
+        "x-lumi-device-id"
+      ];
+
+    const deviceName =
+      request.headers[
+        "x-lumi-device-name"
+      ];
+
+
+    if (
+      typeof deviceId !==
+      "string"
+    ) {
+      socket.close(
+        1008,
+        "Missing device ID",
+      );
+
+      return;
+    }
+
+
+    registerDevice(
+      deviceId,
+      typeof deviceName ===
+        "string"
+        ? deviceName
+        : deviceId,
+      socket,
+    );
+  },
+);
+
 app.get("/health", async () => {
   return {
     status: "ok",
     service: "lumi-gateway",
   };
 });
+
+app.get(
+    "/internal/devices",
+    async () => {
+      return {
+        devices:
+          listDevices(),
+      };
+    },
+  );
+  
+  
+  app.post<{
+    Params: {
+      deviceId: string;
+    };
+  
+    Body: {
+      command: string;
+      tool?: string;
+      args?: Record<
+        string,
+        unknown
+      >;
+    };
+  }>(
+    "/internal/devices/:deviceId/command",
+  
+    async (
+      request,
+    ) => {
+      return (
+        await sendDeviceCommand(
+          request.params.deviceId,
+          request.body,
+        )
+      );
+    },
+  );
 
 app.post<{
   Body: {
