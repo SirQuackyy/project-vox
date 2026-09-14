@@ -81,11 +81,6 @@ app.post<{
 
 const port = Number(process.env.PORT ?? 8787);
 
-await app.listen({
-  host: "0.0.0.0",
-  port,
-});
-
 app.post<{
     Body: {
       sdp: string;
@@ -151,4 +146,9 @@ app.post<{
     }
   
     return response.json();
+  });
+
+  await app.listen({
+    host: "0.0.0.0",
+    port,
   });
